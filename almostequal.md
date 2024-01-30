@@ -1,11 +1,11 @@
 ## Introdution
 
-The goal is to add an almostequal `assert(1 ?= 1.1)` operator to cpython. This tutorial will show how the Python internals works.  
+The goal is to add an `almostequal` `assert(1 ?= 1.1)` operator to CPython. This tutorial is inspired by the [Anthony Shaw’s CPython Internals](https://realpython.com/products/cpython-internals-book/), but covers newer Python version. 
 
-Disclamer: I'm python internals newbie, and writing to teach myself.
+Disclaimer: I'm a Python internals newbie, and I'm writing this to teach myself.
 
 ## Preparations
-Clone the cpython python repo and checkout to a new branch.
+Clone the CPython Python repo and checkout to a new branch.
 ```bash
 git clone git@github.com:python/cpython.git
 ```
@@ -15,22 +15,22 @@ cd cpython
 git checkout tags/v3.12.1 -b v3.12.1
 ```
 
-Next, compile python using [devguide instructions](https://devguide.python.org/#quick-reference). 
+Next, compile Python using [devguide instructions](https://devguide.python.org/#quick-reference). 
 
 
 ## Plan
-In short, to process code cpython works in three phases:
-1. Parsing from code string to AST
-2. Compilatoin from AST to bytecode operaons
-3. Running python vm on bytecode ops
+In short, Cpython works in three phases:
+1. Parsing source code string to AST
+2. Compilation from AST to bytecode operations
+3. Running Python VM on bytecode ops
 
-So, wee need to modify every phase.
+So, to implement almostequal op, we need to modify every phase.
 
 
-## Parsing from code string to AST
+## Parsing source code string to AST
 
 #### Tokenezation 
-Let's start with tokenezation. Tokenization is a process of splitting input string to sequence of tokens. 
+Let's start with tokenization. Tokenization is a process of splitting an input string into a sequence of tokens.
 
 Add a new `ALMOSTEQUAL` token to the  `Grammar/Tokens`
 ```diff 
@@ -62,10 +62,9 @@ And run `make regen-token`. This will regenerate `pycore_token.h`, `Parser/token
 
 #### ASDL 
 
-> Todo
+Now let's move to `Parser/Python.asdl`. Python AST nodes are defined by the ASDL. The ASDL definitions used to genrate the C structure type.
 
-Now let's move to `Parser/Python.asdl`. This file contains ???. Add `Aeq` to `cmpop` operation list. This will help us later. 
-
+Let's add  `Aeq` to `cmpop` operation list. This will help us later. 
 
 ```diff
      unaryop = Invert | Not | UAdd | USub
@@ -77,19 +76,16 @@ Now let's move to `Parser/Python.asdl`. This file contains ???. Add `Aeq` to `cm
  
 
 ```
-Then run `make regen-ast` to regenerate `pycore_ast.h` and `Python-ast.c`.
+Then run `make regen-ast` to regenerate `pycore_ast.h` and `Python-ast.c`. 
 
 
 #### Grammar
-Now let's move to `Parser/python.gram`. This file contains the python grammar. In short: it describes how to construct an abstract syntaxt tree using the grammar rules. 
+Now let's move to `Parser/python.gram`. This file contains the python grammar.  In short: it describes how to construct an abstract syntax tree using the grammar rules.
 
-> Todo
-
-Add new `aeq_bitwise_or` rule.
-It says "when math a `bitwise_or` after  `'?=`' construct a AST node using `_PyPegen_cmpop_expr_pair` function with `Aeq` param"
+Add a new `aeq_bitwise_or` rule.
+It says "when match a `bitwise_or` after `'?=`' token, construct a AST node using `_PyPegen_cmpop_expr_pair` function with `Aeq` parameter"
 
 ```diff 
-
      | in_bitwise_or
      | isnot_bitwise_or
      | is_bitwise_or
@@ -102,13 +98,10 @@ It says "when math a `bitwise_or` after  `'?=`' construct a AST node using `_PyP
  isnot_bitwise_or[CmpopExprPair*]: 'is' 'not' a=bitwise_or { _PyPegen_cmpop_expr_pair(p, IsNot, a) }
  is_bitwise_or[CmpopExprPair*]: 'is' a=bitwise_or { _PyPegen_cmpop_expr_pair(p, Is, a) }
 +aeq_bitwise_or[CmpopExprPair*]: '?=' a=bitwise_or { _PyPegen_cmpop_expr_pair(p, Aeq, a) }
- 
- # Bitwise operators
- # -----------------
 
 ```
 
-Then run `make regen-pegen` to regenerate  `Parser/parser.c`. Let's see how parser is chanegd. Added a new condition defined in grammar. 
+Then run `make regen-pegen` to regenerate  `Parser/parser.c`. Let's see how the parser is changed. 
 
 ``` diff
 +        if (
@@ -131,11 +124,11 @@ Thats all. Recompile cypthon with `make -j4` and test the new operator.
 Fatal Python error: compiler_addcompare: We've reached an unreachable state. Anything is possible.
 ```
 
-Parsing is working, so let's move to the compolation step.
+Parsing is working, so let's move to the compilation step.
 
 
 ## Compilatoin from AST to bytecode operations
-The next stage is comilation. Now need to translate   an AST to sequence of commands for Python VM.
+The next stage is compilation. Now we need to translate an AST to a sequence of commands for the Python VM.
 
 Let's look a the `Python/compile.c/compiler_addcompare`. The function translates a `cmpop_expr_pair` AST node to a `COMPARE_OP` operation  with a simple switch:
 
@@ -171,7 +164,7 @@ Let's jump to compare operation parameters. Move to `Include/object.h` and defin
 ```
 
 
-Then edit the `Py_RETURN_RICHCOMPARE` macros. The macros helps to implement fast compartion among varios  python objects: 
+Then edit the `Py_RETURN_RICHCOMPARE` macros.The macros help to implement fast comparison among various Python objects:
 ```diff
 #define Py_RETURN_RICHCOMPARE(val1, val2, op)                          
     do {                                                                                                       
@@ -184,7 +177,7 @@ Then edit the `Py_RETURN_RICHCOMPARE` macros. The macros helps to implement fast
 ```
 
 
-Now we can use new `PY_AE` parameter in the `Python/compile.c/compiler_addcompare`
+Now we can use the new `PY_AE` parameter in the `Python/compile.c/compiler_addcompare`
 
 ```diff 
      case GtE:
@@ -202,12 +195,12 @@ Now we can use new `PY_AE` parameter in the `Python/compile.c/compiler_addcompar
 Recompile cpython with `make -j4` and try new op
 
 ``` python
->>> 1 ?= 2
+>>> 1 ?= 1.1
 
 Assertion failed: ((oparg >> 5) <= Py_GE), function _PyEval_EvalFrameDefault, file generated_cases.c.h, line 2005.
 ```
 
-Additionaly, we need to fix some other places. Patch an compare asserion in the `Python/bytecodes.c`
+Additionally, we need to fix some other places. Patch a compare assertion in the  `Python/bytecodes.c`
 
 ```diff
          }
@@ -242,7 +235,7 @@ Recompile cpython with `make -j4` and try the new operator.
 
 
 ``` python
->>> 1 ?= 2
+>>> 1 ?= 1.1
 
 False
 ```
@@ -253,7 +246,7 @@ Yaay! Let's move to the final part.
 
 The last goal is to modify python virtual machine. We need to define how to use  the new `Py_AE` parameter of `COMPARE_OP` command. 
 
-In educational purposes let's change behaviour of float ojbects. The `Objects/floatobject.c/float_richcompare` function defines how float objects is compared. It's kind of tricky, and we are intersted in a last compare switch: 
+In educational purposes let's change behaviour of float ojbects. The `Objects/floatobject.c/float_richcompare` function defines how float objects is compared. It's kind of tricky, and we are intersted in the last compare switch: 
 
 ```c 
 
@@ -276,7 +269,7 @@ float_richcompare(PyObject *v, PyObject *w, int op) {
 
 ```
 
-Lets add a new case for almost equal comparion:
+Let's add a new case for almost equal comparison:
 
 ```diff
      case Py_GT:
