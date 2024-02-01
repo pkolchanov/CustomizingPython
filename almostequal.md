@@ -83,15 +83,24 @@ Then run `make regen-ast` to regenerate `pycore_ast.h` and `Python-ast.c`.
 Now let's move to `Parser/python.gram`. This file contains the python grammar.  In short: it describes how to construct an abstract syntax tree using the grammar rules.
 
 Add a new `aeq_bitwise_or` rule.
-It says "when match a `bitwise_or` after `'?=`' token, construct a AST node using `_PyPegen_cmpop_expr_pair` function with `Aeq` parameter"
 
-```diff 
+
+```diff
+compare_op_bitwise_or_pair[CmpopExprPair*]:
+     | eq_bitwise_or
+     | noteq_bitwise_or
+     | lte_bitwise_or
+     | lt_bitwise_or
+     | gte_bitwise_or
+     | gt_bitwise_or
+     | notin_bitwise_or
      | in_bitwise_or
      | isnot_bitwise_or
      | is_bitwise_or
 +    | aeq_bitwise_or
 ```
 
+And define it. "When matching a `bitwise_or` after `'?=`' token, construct a AST node using `_PyPegen_cmpop_expr_pair` function with `Aeq` parameter"
 
 ```diff 
  in_bitwise_or[CmpopExprPair*]: 'in' a=bitwise_or { _PyPegen_cmpop_expr_pair(p, In, a) }
@@ -119,9 +128,18 @@ Then run `make regen-pegen` to regenerate  `Parser/parser.c`. Let's see how the 
 Thats all. Recompile cypthon with `make -j4` and test the new operator. 
 
 ``` python
->>> 1 ?= 2
+>>> 1 ?= 1.1
 
 Fatal Python error: compiler_addcompare: We've reached an unreachable state. Anything is possible.
+```
+
+We can also check a new `Aeq` paramenter with `ast.parse`:
+
+```python
+>>> import ast
+>>> tree = ast.parse('1 ?= 1.1')
+>>> ast.dump(tree)
+'Module(body=[Expr(value=Compare(left=Constant(value=1), ops=[Aeq()], comparators=[Constant(value=1.1)]))], type_ignores=[[])'
 ```
 
 Parsing is working, so let's move to the compilation step.
