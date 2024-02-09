@@ -1,6 +1,6 @@
 # Customzing Python
 
-A list (n=1) of step-by-step of tutorials of Python customizing. Each focuses on understanding Cpython internals.
+A list (n=1) of step-by-step of tutorials of CPython customizing. Each focuses on understanding CPython internals.
 
 ## Pipe operator
 The goal is to add an operator to perfom bash-like chain calls:
