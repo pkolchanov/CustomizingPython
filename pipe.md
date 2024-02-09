@@ -27,6 +27,13 @@ According to the [CPython devguide](https://devguide.python.org/internals/compil
 
 To implement `|>`, we are going to change the first three steps: modify the parsing and compilation processes.
 
+## Preparations
+Clone the cpython python repo and checkout to a new branch.
+```bash
+$ git clone git@github.com:python/cpython.git && cd cpython
+$ git checkout tags/v3.12.1 -b pipes
+```
+
 
 ## Parsing 
 
@@ -157,17 +164,17 @@ Recompile CPython with `make -j4` and test the parser with `ast.parse` module:
 "Module(body=[Expr(value=PipeOp(left=Constant(value=1), right=Call(func=Name(id='f', ctx=Load()), args=[], keywords=[])))], type_ignores=[])"
 ```
 
-Yaaay! We can move to the compilation part.
+Parsing is working, so we can move to the compilation part.
 
 ## Compilation from AST to bytecode
 
 The next stage is compilation. Now we need to translate an AST to a sequence of commands for the Python VM. 
 
-#### Target bytecodes
+#### Target bytecode
 
 `a |> f(b)` is another way of saying  `f(a, b)`
 
-Let's examine how `f(a, b)` is compiled into bytecodes using the `dis` module:
+Let's examine how `f(a, b)` is compiled into bytecode instructions using the `dis` module:
 
 ```python
 >>> import dis
@@ -183,16 +190,17 @@ Let's examine how `f(a, b)` is compiled into bytecodes using the `dis` module:
              24 RETURN_VALUE
 ```
 
-Four things are happening here:
-1. Load a function to data stack using `LOAD_NAME`
-2. Load value of `a` to stack using `LOAD_NAME`
-3. Load value of `b` to stack using `LOAD_NAME`
-4. Call funtion using `CALL` with `2` arguments.
+These instructions are telling an interpreter to:
 
-So, to implement the pipe, we need to add an additional argument to the stack, between the load function and the function call, during compilation.
+1. Load a function to a stack using `LOAD_NAME`
+2. Load value of `a` to a stack using `LOAD_NAME`
+3. Load value of `b` to a stack using `LOAD_NAME`
+4. Call the function using `CALL` with `2` arguments.
+
+So, to implement the pipe, we need to add an additional argument to the stack, between a function load and a function call, during compilation.
 
 #### Compile.c
-Starting point is the `Python/compile.c` file.
+The starting point of compilation is the `Python/compile.c` file.
 
 Let's look to the `Python/compile.c/compiler_visit_expr1` . 
 
@@ -231,11 +239,10 @@ Add a new case with for `PipeOp_kind`. Let's start with a copy of regular functi
 
 Recompile Cpython with `make -j4` and try new operator:
 
-!TODO
 ```python
 >>> 1 |> f()
 
-BLAH BLAH
+Assertion failed: (scope || PyUnicode_READ_CHAR(name, 0) == '_'), function compiler_nameop, file compile.c, line 4209
 ```
 
 Seems like compiler can't resolve a `f` symbol. Let's fix that. 
