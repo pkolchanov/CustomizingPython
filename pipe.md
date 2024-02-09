@@ -15,17 +15,17 @@ The goal is to add an operator to perform bash-like chain calls: to cpython:
 
 According to the [CPython devguide](https://devguide.python.org/internals/compiler/), the compilation of source code involves several steps: 
  
-> 1. Tokenize the source code (Parser/lexer/ and Parser/tokenizer/).
+> 1. Tokenize the source code
 >
-> 2. Parse the stream of tokens into an Abstract Syntax Tree (Parser/parser.c).
+> 2. Parse the stream of tokens into an Abstract Syntax Tree.
 >
-> 2. Transform AST into an instruction sequence (Python/compile.c).
+> 2. Transform AST into an instruction sequence ).
 > 
-> 2. Construct a Control Flow Graph and apply optimizations to it (Python/flowgraph.c).
+> 2. Construct a Control Flow Graph and apply optimizations to it.
 >
-> 3. Emit bytecode based on the Control Flow Graph (Python/assemble.c).
+> 3. Emit bytecode based on the Control Flow Graph.
 
-To implement |>, we are going to change the first three steps: modify the parsing and compilation processes.
+To implement `|>`, we are going to change the first three steps: modify the parsing and compilation processes.
 
 
 ## Parsing 
@@ -238,7 +238,7 @@ Recompile Cpython with `make -j4` and try new operator:
 BLAH BLAH
 ```
 
-Seems like compiler can't resolve `f` symbol. Let's fix that. 
+Seems like compiler can't resolve a `f` symbol. Let's fix that. 
 
 #### Symbables 
 
@@ -301,7 +301,7 @@ Move back to the `Python/compile.c/compiler_visit_expr1` and redefine case for `
          return compiler_lambda(c, e);
 ```
 
-And define a new compiler_pipe_call function. Start with a modified copy of `compiler_call`, which calls unmodified version of right expression.
+And define a new `compiler_pipe_call` function. Start with a modified copy of `compiler_call`, which calls the unmodified version of the right expression:
 
 ```c
 static int compiler_pipe_call(struct compiler *c, expr_ty e) {
@@ -330,7 +330,7 @@ static int compiler_pipe_call(struct compiler *c, expr_ty e) {
 
 ```
 
-Recompile CPython and check that nothing is broken
+Recompile CPython and check that nothing is broken:
 ```python
 >>> f = lambda x:x
 >>> 1 |> f()
@@ -340,7 +340,7 @@ TypeError: <lambda>() missing 1 required positional argument: 'x'
 
 Fine. Finaly, we need to add `e->v.PipeOp.left` to  `v.Call.args` 
 
-Lets create new argument sequence using `_Py_asdl_expr_seq_new`, and set it:
+Let's create new argument sequence using `_Py_asdl_expr_seq_new` and fill it with orignal args and left pipe expression:
 
 ```diff
 
@@ -374,4 +374,22 @@ Recompile Cpython with `make -j4` and try new operator:
 [2, 4]
 ```
 
-Yaaaaay!
+Yaaaaay! 
+
+### Final dis
+
+```python
+>>> import dis
+>>> dis.dis("a |> f(b)")
+
+  0           RESUME                   0
+
+  1           LOAD_NAME                0 (f)
+              PUSH_NULL
+              LOAD_NAME                1 (b)
+              LOAD_NAME                2 (a)
+              CALL                     2
+              RETURN_VALUE
+```
+
+The bytecode is the same to a `f(a,b)`. 
