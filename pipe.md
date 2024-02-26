@@ -1,8 +1,7 @@
 > [!WARNING]
-> I'm a Python internals newbie, and I'm writing this to teach myself.
+> 'm a Python internals newbie, the turoial may contain mistakes and clunky solutions. 
 
-
-## Introdution
+# Pipe operator
 
 The goal is to add an operator to perform bash-like chain calls to CPython:
 ```python
@@ -204,8 +203,7 @@ The starting point of compilation is the `Python/compile.c` file.
 
 Let's look to the `Python/compile.c/compiler_visit_expr1` . 
 
-The function descibes compilation of an `expr_ty` AST node to with a simple switch. For example, to compile a binary operation like `a + b`
-` complier recurcively visitis left and right nodes, ands adds binary operation to controll sequence. 
+The function describes compilation of an `expr_ty` AST node to with a simple switch. For example, to compile a binary operation like `a + b`  complier recurcively visitis left and right nodes, and adds binary operation to controll sequence. 
 
 ```c
 static int
@@ -249,9 +247,9 @@ Seems like compiler can't resolve a `f` symbol. Let's fix that.
 
 #### Symbables 
 
-The purpose of the symbol table is to resolving scopes. 
+The purpose of a symbol table is to resolving scopes. 
 
-Look at Python/symtable.c/symtable_visit_expr. The function recursively visits the AST and builds symbol tables.
+Look at `Python/symtable.c/symtable_visit_expr`. The function recursively visits the AST and builds symbol tables.
 ```c
 static int
 symtable_visit_expr(struct symtable *st, expr_ty e)

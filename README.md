@@ -1,16 +1,31 @@
 # Customzing Python
 
-A list (n=1) of step-by-step of tutorials of CPython customizing. Each focuses on understanding CPython internals.
+A list (n=2) of step-by-step of tutorials of CPython customizing. Each focuses on understanding CPython internals.
 
 ## Pipe operator
-The goal is to add an operator to perform bash-like chain calls:
+The goal is to add an `|>` operator to the python interpreter to perform bash-like chain calls:
 ```python
 >>> [1,2] |> map(lambda x:x*2) |> list()
 
 [2, 4]
 ```
 
-[Check the tutorial](/pipe.md)
+
+**[Read the tutorial](/pipe.md)**
+
+## Tail call optimization
+The goal is to implement tail-call optimization in the python inteprtetier. 
+```python
+>>> def u(i):
+        if i == 0:
+            return 'a'
+        return u(i-1)
+
+>>> u(10000)
+'a'
+```
+
+**[Read the tutorial](/tail.md)**
 
 ---
 Pavel Kolchanov, 2024
