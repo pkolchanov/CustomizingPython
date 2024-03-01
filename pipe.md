@@ -1,5 +1,5 @@
 > [!WARNING]
-> 'm a Python internals newbie, the turoial may contain mistakes and clunky solutions. 
+> I'm new to Python internals, so the tutorial may contain mistakes and clunky solutions.
 
 # Pipe operator
 
@@ -27,7 +27,7 @@ According to the [CPython devguide](https://devguide.python.org/internals/compil
 To implement `|>`, we are going to change the first three steps: modify the parsing and compilation processes.
 
 ## Preparations
-Clone the cpython python repo and checkout to a new branch.
+Clone the cpython repo and checkout to a new branch.
 ```bash
 $ git clone git@github.com:python/cpython.git && cd cpython
 $ git checkout tags/v3.12.1 -b pipes
