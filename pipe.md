@@ -26,7 +26,7 @@ According to the [CPython devguide](https://devguide.python.org/internals/compil
 
 To implement `|>`, we are going to change the first three steps: modify the parsing and compilation processes.
 
-## Preparations
+## Prereq­ui­sites
 Clone the cpython repo and checkout to a new branch.
 ```bash
 $ git clone git@github.com:python/cpython.git && cd cpython
@@ -192,8 +192,8 @@ Let's examine how `f(a, b)` is compiled into bytecode instructions using the `di
 These instructions are telling an interpreter to:
 
 1. Load a function to a stack using `LOAD_NAME`
-2. Load value of `a` to a stack using `LOAD_NAME`
-3. Load value of `b` to a stack using `LOAD_NAME`
+2. Load value of `a` to the stack using `LOAD_NAME`
+3. Load value of `b` to the stack using `LOAD_NAME`
 4. Call the function using `CALL` with `2` arguments.
 
 So, to implement the pipe, we need to add an additional argument to the stack, between a function load and a function call, during compilation.

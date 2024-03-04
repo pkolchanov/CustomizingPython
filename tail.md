@@ -25,24 +25,45 @@ We are going to modify three steps of python inperpreter:
 2. Add an optimization to compiler, that inserts `TAIL_CALL` to code
 3. Implement an interpretator for the new bytecode
 
-## Preparations
+## Prereq­ui­sites
 Clone the cpython repo and checkout to a new branch.
 ```bash
 $ git clone git@github.com:python/cpython.git && cd cpython
 $ git checkout tags/v3.12.1 -b tail-call
 ```
 
-## Bytecode instruction
+## A new bytecode instruction
 
-#### Instruction defenition
-Python source code is compiled into bytecode. Bytecode is a representation of a Python program. Bytecode contains of a set of insturctions for the python vm.  
+#### About bytecodes
+Python source code is compiled into bytecode.  Bytecode is a set of insturctions for the python vm. 
+For example, check how `f(a, b)` is represented:
 
-<!-- todo -->
+```python
+>>> import dis
+>>> dis.dis("f(a, b)")
+  0           0 RESUME                   0
+
+  1           2 PUSH_NULL
+              4 LOAD_NAME                0 (f)
+              6 LOAD_NAME                1 (a)
+              8 LOAD_NAME                2 (b)
+             10 PRECALL                  2
+             14 CALL                     2
+             24 RETURN_VALUE
+```
+
+These instructions are telling an interpreter to:
+
+1. Load a function to a value stack using `LOAD_NAME`
+2. Load value of `a` to the value stack using `LOAD_NAME`
+3. Load value of `b` to the value stack using `LOAD_NAME`
+4. Call the function using `CALL` with `2` arguments.
 
 
+#### `TAIL_CALL` defenition
 Let's introduce a new bytecode instruction. The `Python/bytecodes.c` contains defenitions and interpretations of python bytecodes. It's written in a custom syntax. 
 
-We're interested in calls. Let's introduce an `TAIL_CALL` by blank copy of regular `CALL`
+Since we're interested in calls, let's introduce an `TAIL_CALL` by blank copy of regular `CALL`
 
 ```diff
   macro(CALL) = _SPECIALIZE_CALL + unused/2 + _CALL;
@@ -72,7 +93,7 @@ Second, it defined how to interpret the new bytecode in the `Python/generated_ca
 ```
 
 #### Importlib
-The other important thing is to update imporlib after the new bytecode is introduced. 
+The other important step is to update the imporlib after introducing the new bytecode. Since some Python libraries are frozen and linked to the Python interpreter, it is necessary to freeze them after any bytecode updates.
 
 Change `MAGIC_NUMBER` constant in the `Lib/importlib/_bootstrap_external.py`. This will lead to .pyc files with the old `MAGIC_NUMBER` to be recompiled by the interpreter on import. 
 
@@ -157,20 +178,19 @@ And check the new optimization with `dis` module:
 Perfect. Let's move to the final step. 
 
 ##  Implement an interpretator for the new bytecode
-As mentioned earlier, the `Python/bytecodes.c` file contains definitions and interpretations of Python bytecodes. 
+As previously mentioned, the `Python/bytecodes.c` file contains definitions and interpretations of Python bytecodes. 
 Currently, we are using a blank copy of `CALL` interptetier as `TAIL_CALL`. First, let's understand how it works.
 
 
-#### A word of terms
-1. Call frame is an
-2. Data frame frame is
-
 #### How `CALL` works 
-`Python/bytecodes.c/_CALL` does four things:
+A bit of terminology. Call frame is a structure that represents a function call's execution context: local variables, function arguments etc.
+
+Value stack is a list of pointers to python objects, that instructions operates. For example, 
+
+The `Python/bytecodes.c/_CALL` manipulaets both structures. In summary, it does three things:
 1. Creates a new call frame and pushes it to the call stack
-2. Consumes arguments from the current frame's data stack
-3. Updates the current frame's return offset
-4. Passes control to the new frame
+2. Consumes arguments from the current frame's value stack
+3. Passes control to the new frame
 
 ```c
 //  Creates a new call frame and pushes it to the call stack
@@ -181,7 +201,7 @@ _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
     args, total_args, NULL
 );
 
-// Consumes arguments from the current frame's data stack
+// Consumes arguments from the current frame's value stack
 STACK_SHRINK(oparg + 2);
 
 if (new_frame == NULL) {
@@ -193,47 +213,119 @@ frame->return_offset = (uint16_t)(next_instr - this_instr);
 DISPATCH_INLINED(new_frame);
 ```
 
+Simple and easy. Let's move to the next step. 
 #### `TAIL_CALL` interptetier
+To create TAIL_CALL interptetier we are going to change a few things in the regular CALL.
+
+First, we need to drop the current frame before creating a new call frame. But, because references to arguments are stored in the dying currect frame, we need to store them before drop, and clean up after creation of the new frame. 
 
 
+Let's move to `Python/bytecodes.c/_TAIL_CALL`. 
 
-Save args
-```c
-PyObject **newargs = PyMem_Malloc(sizeof(PyObject*) * (total_args));
-Py_ssize_t j, n;
-n = total_args;
+First, save args. Since CPython uses it's own memory allocator, use `PyMem_Malloc` to allocate memory. 
 
-for (j = 0; j < n; j++)
+```diff
+// Check if the call can be inlined or not
+if (Py_TYPE(callable) == &PyFunction_Type &&
+    tstate->interp->eval_frame == NULL &&
+    ((PyFunctionObject *)callable)->vectorcall == _PyFunction_Vectorcall)
 {
-    PyObject *x = args[j];
-    newargs[j] = x;
-}
++ PyObject **newargs = PyMem_Malloc(sizeof(PyObject*) * (total_args));
++ Py_ssize_t j, n;
++ n = total_args;
 
++ for (j = 0; j < n; j++)
++ {
++     PyObject *x = args[j];
++     newargs[j] = x;
++ }
 ```
-Drop the current frame. 
-```c
-STACK_SHRINK(oparg + 2);
-_Py_LeaveRecursiveCallPy(tstate);
-_PyFrame_SetStackPointer(frame, stack_pointer);
-_PyInterpreterFrame *dying = frame;
-frame = tstate->current_frame = dying->previous;
-_PyEval_FrameClearAndPop(tstate, dying);
-LOAD_SP();
+
+Next, drop the current call frame. The snippet is a copy of the `POP_FRAME` instruction.
+```diff
++ STACK_SHRINK(oparg + 2);
++ _Py_LeaveRecursiveCallPy(tstate);
++_PyFrame_SetStackPointer(frame, stack_pointer);
++ _PyInterpreterFrame *dying = frame;
++ frame = tstate->current_frame = dying->previous;
++_PyEval_FrameClearAndPop(tstate, dying);
++ LOAD_SP();
 ```
 
 Init a new frame using callable and new args.
-```c
+```diff 
 _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
     tstate, (PyFunctionObject *)callable, locals,
-    newargs, total_args, NULL
+-    args, total_args, NULL
++    newargs, total_args, NULL
 );
 ```
-Clean up newags
+Clean up argument stash:
 
+```diff
++ PyMem_Free(newargs);
 ```
-PyMem_Free(newargs);
-```
-And pass contoll to the new frame
-```
+And pass contoll to the new frame:
+
+```c
 DISPATCH_INLINED(new_frame);
 ```
+
+
+Recompile CPython with `make regen-cases && make regen-importlib && make -j6` and test the new operator. 
+
+
+## Final check
+
+```python
+>>> def fact(n, acc):
+...    if n == 1:
+...        return acc
+...    return fact(n-1, acc*n)
+
+>>>fact (1500,1)
+
+48119977967797748601669900935...
+```
+
+<!-- 
+All together:
+
+```c
+if (Py_TYPE(callable) == &PyFunction_Type &&
+                tstate->interp->eval_frame == NULL &&
+                ((PyFunctionObject *)callable)->vectorcall == _PyFunction_Vectorcall)
+            {
+    int code_flags = ((PyCodeObject*)PyFunction_GET_CODE(callable))->co_flags;
+    PyObject *locals = code_flags & CO_OPTIMIZED ? NULL : Py_NewRef(PyFunction_GET_GLOBALS(callable));
+    Py_INCREF(callable);
+    PyObject **newargs = PyMem_Malloc(sizeof(PyObject*) * (total_args));
+    Py_ssize_t j, n;
+    n = total_args;
+
+    for (j = 0; j < n; j++)
+    {
+        PyObject *x = args[j];
+        newargs[j] = x;
+    }
+    STACK_SHRINK(oparg + 2);
+
+    _Py_LeaveRecursiveCallPy(tstate);
+    _PyFrame_SetStackPointer(frame, stack_pointer);
+    _PyInterpreterFrame *dying = frame;
+    frame = tstate->current_frame = dying->previous;
+    _PyEval_FrameClearAndPop(tstate, dying);
+    LOAD_SP();
+    _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
+        tstate, (PyFunctionObject *)callable, locals,
+        newargs, total_args, NULL
+    );
+    PyMem_Free(newargs);
+    
+    if (new_frame == NULL) {
+        GOTO_ERROR(error);
+    }
+    
+        DISPATCH_INLINED(new_frame);
+}
+``` -->

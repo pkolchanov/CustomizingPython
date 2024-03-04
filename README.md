@@ -1,9 +1,9 @@
 # Customzing Python
 
-A list (n=2) of step-by-step of tutorials of CPython customizing. Each focuses on understanding CPython internals.
+A series of step-by-step of tutorials of CPython customizing. Each focuses on understanding CPython internals, and highlights different parts of the interpreter. 
 
 ## Pipe operator
-The goal is to add an `|>` operator to the python interpreter to perform bash-like chain calls:
+We will  add an `|>` operator to the CPython interpreter to perform bash-like chain calls:
 ```python
 >>> [1,2] |> map(lambda x:x*2) |> list()
 
