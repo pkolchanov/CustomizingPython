@@ -7,7 +7,7 @@ A tail call happens when a function calls another as its last action, so it has 
 def g():
    return f()
 ```
-Tail call optimization eliminates the need for adding a new stack frame to the call stack. This is useful for writing recursion-based functions. 
+Tail call optimization eliminates the need for adding a new stack frame to the call stack. This is useful for writing recursive functions:
 
 ```python
 def fact(n, acc):
@@ -26,7 +26,7 @@ We are going to modify three steps of python inperpreter:
 3. Implement an interpretator for the new bytecode
 
 ## Prereq­ui­sites
-Clone the cpython repo and checkout to a new branch.
+Clone the CPython repo and checkout to a new branch.
 ```bash
 $ git clone git@github.com:python/cpython.git && cd cpython
 $ git checkout tags/v3.12.1 -b tail-call
@@ -78,7 +78,7 @@ First, it defined a new bytecode. For example, in the `Include/opcode_ids.h`
 +#define TAIL_CALL                              116
 ```
 
-Second, it defined how to interpret the new bytecode in the `Python/generated_cases.c.h`. This file contains a whole python interptetiner. 
+Second, it defined how to interpret the new bytecode in the `Python/generated_cases.c.h`. This file contains functions for the interptetiner. 
 
 ```diff
 +        TARGET(TAIL_CALL) {
@@ -125,7 +125,7 @@ _PyCfg_OptimizeCodeUnit(cfg_builder *g, PyObject *consts, PyObject *const_cache,
 }
 ```
 
-Instert a new optimization `optimize_tail_call`:
+Insert a new optimization `optimize_tail_call`:
 
 ```diff
     RETURN_IF_ERROR(
@@ -164,7 +164,7 @@ And check the new optimization with `dis` module:
 
 ```python
 >>> def f():
-....    return g():
+...    return g():
 
 >>> dis.dis(f)
 
@@ -215,10 +215,9 @@ DISPATCH_INLINED(new_frame);
 
 Simple and easy. Let's move to the next step. 
 #### `TAIL_CALL` interptetier
-To create TAIL_CALL interptetier we are going to change a few things in the regular CALL.
+To create a `TAIL_CALL` interptetier we are going to change a few things in the regular `CALL`.
 
-First, we need to drop the current frame before creating a new call frame. But, because references to arguments are stored in the dying currect frame, we need to store them before drop, and clean up after creation of the new frame. 
-
+We need to drop the current frame before creating a new call frame. However, because references to arguments are stored in the current dying frame, we need to store them before dropping. And clean them up after creating the new frame.
 
 Let's move to `Python/bytecodes.c/_TAIL_CALL`. 
 
@@ -241,7 +240,7 @@ if (Py_TYPE(callable) == &PyFunction_Type &&
 + }
 ```
 
-Next, drop the current call frame. The snippet is a copy of the `POP_FRAME` instruction.
+Next, drop the current call frame. The snippet is a copy of the `Python/bytecodes.c/POP_FRAME` instruction.
 ```diff
 + STACK_SHRINK(oparg + 2);
 + _Py_LeaveRecursiveCallPy(tstate);
@@ -260,7 +259,7 @@ _PyInterpreterFrame *new_frame = _PyEvalFramePushAndInit(
 +    newargs, total_args, NULL
 );
 ```
-Clean up argument stash:
+Clean up the argument stash:
 
 ```diff
 + PyMem_Free(newargs);
