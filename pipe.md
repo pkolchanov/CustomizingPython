@@ -111,7 +111,7 @@ _PyAST_PipeOp(expr_ty left, expr_ty right, int lineno, int col_offset, int
 
 #### Grammar
 
-Now let's move to the `Parser/python.gram`. 
+Now let's move to the `Grammar/python.gram`. 
 
 This file contains the whole python grammar.  In short: it describes how to construct an abstract syntax tree using the grammar rules.
 
@@ -184,9 +184,8 @@ Let's examine how `f(b, a)` is compiled into bytecode instructions using the `di
               4 LOAD_NAME                0 (f)
               6 LOAD_NAME                1 (b)
               8 LOAD_NAME                2 (a)
-             10 PRECALL                  2
-             14 CALL                     2
-             24 RETURN_VALUE
+             10 CALL                     2
+             18 RETURN_VALUE
 ```
 
 These instructions are telling an interpreter to:
@@ -308,6 +307,7 @@ Move back to the `Python/compile.c/compiler_visit_expr1` and redefine case for `
 
 And define a new `compiler_pipe_call` function. Start with a modified copy of `compiler_call`, which calls the right expression:
 
+
 ```c
 static int compiler_pipe_call(struct compiler *c, expr_ty e) {
     expr_ty func_e = e->v.PipeOp.right;
@@ -323,9 +323,9 @@ static int compiler_pipe_call(struct compiler *c, expr_ty e) {
     }
     
     RETURN_IF_ERROR(check_caller(c, func_e->v.Call.func));
-    VISIT(c, expr, func_e->v.Call.func);
     location loc = LOC(func_e->v.Call.func);
     ADDOP(c, loc, PUSH_NULL);
+    VISIT(c, expr, func_e->v.Call.func);
     loc = LOC(func_e);
 
     return compiler_call_helper(c, loc, 0,
@@ -362,9 +362,9 @@ static int compiler_pipe_call(struct compiler *c, expr_ty e) {
     }
     
     RETURN_IF_ERROR(check_caller(c, func_e->v.Call.func));
-    VISIT(c, expr, func_e->v.Call.func);
     location loc = LOC(func_e->v.Call.func);
     ADDOP(c, loc, PUSH_NULL);
+    VISIT(c, expr, func_e->v.Call.func);
     loc = LOC(func_e);
 
 +    Py_ssize_t original_len = asdl_seq_LEN(func_e->v.Call.args);
@@ -404,14 +404,14 @@ Yaaaaay!
 >>> import dis
 >>> dis.dis("a |> f(b)")
 
-  0           RESUME                   0
+  0           0 RESUME                   0
 
-  1           LOAD_NAME                0 (f)
-              PUSH_NULL
-              LOAD_NAME                1 (b)
-              LOAD_NAME                2 (a)
-              CALL                     2
-              RETURN_VALUE
+  1           2 PUSH_NULL
+              4 LOAD_NAME                0 (f)
+              6 LOAD_NAME                1 (b)
+              8 LOAD_NAME                2 (a)
+             10 CALL                     2
+             18 RETURN_VALUE
 ```
 
 The bytecode is the same to a `f(b, a)`. 
