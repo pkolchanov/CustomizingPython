@@ -16,26 +16,26 @@ def fact(n, acc):
     return fact(n-1, acc*n)
 ```
 
-Altrough Guido Van Rossum [considers](https://neopythonic.blogspot.com/2009/04/final-words-on-tail-calls.html ) tail call optimizatoin as unpythonic, it's interesting to implement it for educational purposes. Let's start.
+Although Guido Van Rossum [considers](https://neopythonic.blogspot.com/2009/04/final-words-on-tail-calls.html ) tail call optimization as unpythonic, it's interesting to implement it for educational purposes. Let's start.
 
 ## Plan 
-We are going to modify three steps of python inperpreter:
+We are going to modify three steps of python interpreter:
 
-1. Introduce a new `TAIL_CALL` bytecode opeartor to python vm
+1. Introduce a new `TAIL_CALL` bytecode operator to python vm
 2. Add an optimization to compiler, that inserts `TAIL_CALL` to code
-3. Implement an interpretator for the new bytecode
+3. Implement an interpreter for the new bytecode
 
 ## Prereq­ui­sites
 Clone the CPython repo and checkout to a new branch.
 ```bash
 $ git clone git@github.com:python/cpython.git && cd cpython
-$ git checkout tags/v3.12.1 -b tail-call
+$ git checkout 2ef520ebecf5544ba792266a5dbe4d53653a4a03 -b tail-call
 ```
 
 ## A new bytecode instruction
 
 #### About bytecodes
-Python source code is compiled into bytecode.  Bytecode is a set of insturctions for the python vm. 
+Python source code is compiled into bytecode.  Bytecode is a set of instructions for the python vm.
 For example, check how `f(a, b)` is represented:
 
 ```python
@@ -60,17 +60,30 @@ These instructions are telling an interpreter to:
 4. Call the function using `CALL` with `2` arguments.
 
 
-#### `TAIL_CALL` defenition
-Let's introduce a new bytecode instruction. The `Python/bytecodes.c` contains defenitions and interpretations of python bytecodes. It's written in a custom syntax. 
+#### `TAIL_CALL` definition
+Let's introduce a new bytecode instruction. The `Python/bytecodes.c` contains definitions and interpretations of python bytecodes. It's written in a custom syntax. 
 
-Since we're interested in calls, let's introduce an `TAIL_CALL` by blank copy of regular `CALL`
+Since we're interested in calls, let's introduce an `TAIL_CALL` macros
 
 ```diff
   macro(CALL) = _SPECIALIZE_CALL + unused/2 + _CALL;
-+ macro(TAIL_CALL) =  _SPECIALIZE_CALL + unused/2 + _CALL;
++ macro(TAIL_CALL) = unused/1 + unused/2 + _TAIL_CALL;
 ```
 
-Next, run `make regen-cases` to translate the `Python/bytecodes.c` to a propper c code. Let's have a look what is changed.
+And add an implementation by copying of regular call:
+
+```diff
++op(_TAIL_CALL, (callable, self_or_null, args[oparg] -- res)) {
++            // oparg counts all of the args, but *not* self:
++            int total_args = oparg;
++            if (self_or_null != NULL) {
++                args--;
++                total_args++;
++            }
+...
+```
+
+Next, run `make regen-cases` to translate the `Python/bytecodes.c` to a proper c code. Let's have a look what is changed.
 
 First, it defined a new bytecode. For example, in the `Include/opcode_ids.h`
 
@@ -78,7 +91,7 @@ First, it defined a new bytecode. For example, in the `Include/opcode_ids.h`
 +#define TAIL_CALL                              116
 ```
 
-Second, it defined how to interpret the new bytecode in the `Python/generated_cases.c.h`. This file contains functions for the interptetiner. 
+Second, it defined how to interpret the new bytecode in the `Python/generated_cases.c.h`. This file contains functions for the interpreter. 
 
 ```diff
 +        TARGET(TAIL_CALL) {
@@ -93,7 +106,7 @@ Second, it defined how to interpret the new bytecode in the `Python/generated_ca
 ```
 
 #### Importlib
-The other important step is to update the imporlib after introducing the new bytecode. Since some Python libraries are frozen and linked to the Python interpreter, it is necessary to freeze them after any bytecode updates.
+The other important step is to update the importlib after introducing the new bytecode. Since some Python libraries are frozen and linked to the Python interpreter, it is necessary to freeze them after any bytecode updates.
 
 Change `MAGIC_NUMBER` constant in the `Lib/importlib/_bootstrap_external.py`. This will lead to .pyc files with the old `MAGIC_NUMBER` to be recompiled by the interpreter on import. 
 
@@ -105,9 +118,9 @@ Then, run `make regen-importlib`.
 ## Flowgraph optimization
 
 According to the
-[CPython devguide](https://devguide.python.org/internals/compiler/#control-flow-graphs)  control flow graph is an intermediate result of python source code compilation. CFGs are usually one step away from final code output, and are perfect place to perfom a code optimization. 
+[CPython devguide](https://devguide.python.org/internals/compiler/#control-flow-graphs) a control flow graph is an intermediate result of python source code compilation. CFGs are usually one step away from final code output, and are a perfect place to perfom a code optimization. 
 
-Look to the to the `Python/flowgraph.c/_PyCfg_OptimizeCodeUnit`. The function updates code graph: removes unused condsts, insterts super instructions, etc.
+Look at the `Python/flowgraph.c/_PyCfg_OptimizeCodeUnit`. The function updates code graph: removes unused consts, inserts super instructions, etc.
 
 ```c
 int
@@ -156,7 +169,7 @@ optimize_tail_call(cfg_builder *g)
 }
 ```
 
-Let's check if the new optimizaiton is working.
+Let's check if the new optimization is working.
 
 Recompile cpython with `make -j6`
 
@@ -164,7 +177,7 @@ And check the new optimization with `dis` module:
 
 ```python
 >>> def f():
-...    return g():
+...    return g()
 
 >>> dis.dis(f)
 
@@ -177,17 +190,17 @@ And check the new optimization with `dis` module:
 
 Perfect. Let's move to the final step. 
 
-##  Implement an interpretator for the new bytecode
+##  Implement an interpreter for the new bytecode
 As previously mentioned, the `Python/bytecodes.c` file contains definitions and interpretations of Python bytecodes. 
-Currently, we are using a blank copy of `CALL` interptetier as `TAIL_CALL`. First, let's understand how it works.
+Currently, we are using a blank copy of `CALL` interpreter as `TAIL_CALL`. First, let's understand how it works.
 
 
 #### How `CALL` works 
-A bit of terminology. Call frame is a structure that represents a function call's execution context: local variables, function arguments etc.
+A bit of terminology. A call frame is a structure that represents a function call's execution context: local variables, function arguments etc.
 
-Value stack is a list of pointers to python objects, that instructions operates. For example, 
+A value stack is a list of pointers to python objects, that instructions operate on.
 
-The `Python/bytecodes.c/_CALL` manipulaets both structures. In summary, it does three things:
+The `Python/bytecodes.c/_CALL` manipulates both structures. In summary, it does three things:
 1. Creates a new call frame and pushes it to the call stack
 2. Consumes arguments from the current frame's value stack
 3. Passes control to the new frame
@@ -214,14 +227,14 @@ DISPATCH_INLINED(new_frame);
 ```
 
 Simple and easy. Let's move to the next step. 
-#### `TAIL_CALL` interptetier
-To create a `TAIL_CALL` interptetier we are going to change a few things in the regular `CALL`.
+#### `TAIL_CALL` interpreter
+To create a `TAIL_CALL` interpreter we are going to change a few things in the regular `CALL`.
 
 We need to drop the current frame before creating a new call frame. However, because references to arguments are stored in the current dying frame, we need to store them before dropping. And clean them up after creating the new frame.
 
 Let's move to `Python/bytecodes.c/_TAIL_CALL`. 
 
-First, save args. Since CPython uses it's own memory allocator, use `PyMem_Malloc` to allocate memory. 
+First, save args and callable. Since CPython uses it's own memory allocator, use `PyMem_Malloc` to allocate memory. 
 
 ```diff
 // Check if the call can be inlined or not
@@ -229,6 +242,7 @@ if (Py_TYPE(callable) == &PyFunction_Type &&
     tstate->interp->eval_frame == NULL &&
     ((PyFunctionObject *)callable)->vectorcall == _PyFunction_Vectorcall)
 {
++ Py_INCREF(callable);    
 + PyObject **newargs = PyMem_Malloc(sizeof(PyObject*) * (total_args));
 + Py_ssize_t j, n;
 + n = total_args;
@@ -264,14 +278,14 @@ Clean up the argument stash:
 ```diff
 + PyMem_Free(newargs);
 ```
-And pass contoll to the new frame:
+And pass control to the new frame:
 
 ```c
 DISPATCH_INLINED(new_frame);
 ```
 
 
-Recompile CPython with `make regen-cases && make regen-importlib && make -j6` and test the new operator. 
+Recompile CPython with `make regen-cases && make regen-importlib && make -j6` and test the new operator. 1500 is more than default recursion depth. 
 
 
 ## Final check
@@ -282,7 +296,7 @@ Recompile CPython with `make regen-cases && make regen-importlib && make -j6` an
 ...        return acc
 ...    return fact(n-1, acc*n)
 
->>>fact (1500,1)
+>>>fact (1500, 1)
 
 48119977967797748601669900935...
 ```
