@@ -118,7 +118,7 @@ Then, run `make regen-importlib`.
 ## Flowgraph optimization
 
 According to the
-[CPython devguide](https://devguide.python.org/internals/compiler/#control-flow-graphs) a control flow graph is an intermediate result of python source code compilation. CFGs are usually one step away from final code output, and are a perfect place to perfom a code optimization. 
+[CPython devguide](https://devguide.python.org/internals/compiler/#control-flow-graphs) a control flow graph is an intermediate result of python source code compilation. CFGs are usually one step away from final code output, and are a perfect place to perform a code optimization. 
 
 Look at the `Python/flowgraph.c/_PyCfg_OptimizeCodeUnit`. The function updates code graph: removes unused consts, inserts super instructions, etc.
 
